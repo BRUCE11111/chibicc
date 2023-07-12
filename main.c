@@ -29,6 +29,8 @@ static Token *new_token(TokenKind kind, char *start, char *end) {
     return tok;
 }
 
+static char *current_input;
+
 // Reports an error and exit.
 static void error(char *fmt, ...) {
     va_list ap;
@@ -38,6 +40,29 @@ static void error(char *fmt, ...) {
     exit(1);
 }
 
+// Reports an error location and exit
+static void verror_at(char *loc, char *fmt, va_list ap) {
+    int pos = loc - current_input;
+    fprintf(stderr, "%s\n", current_input);
+    fprintf(stderr, "%*s", pos, ""); // print pos spaces.
+    fprintf(stderr, "^ ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    exit(1);
+}
+
+static void error_at(char *loc, char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    verror_at(loc, fmt, ap);
+}
+
+static void error_tok(Token *tok, char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    verror_at(tok->loc, fmt, ap);
+}
+
 // Consumes the current token is it matches `s`
 static bool equal(Token *tok, char *op) {
     return memcmp(tok->loc, op, tok->len) == 0 && op[tok->len] == '\0';
@@ -45,17 +70,19 @@ static bool equal(Token *tok, char *op) {
 
 // Ensure that the current token is `s`
 static Token *skip(Token *tok, char *s) {
-    if (!equal(tok, s)) { error("expected '%s'", s); }
+    if (!equal(tok, s)) { error_tok(tok, "expected '%s'", s); }
     return tok->next;
 }
 
 // Ensure that the current token is TK_NUM
 static int get_number(Token *tok) {
-    if (tok->kind != TK_NUM) { error("expectd a number"); }
+    if (tok->kind != TK_NUM) { error_tok(tok, "expectd a number"); }
     return tok->val;
 }
 
-static Token *tokenize(char *p) {
+// Tokenize `current_input` and returns new tokens.
+static Token *tokenize(void) {
+    char *p = current_input;
     Token head = {};
     Token *cur = &head;
     while (*p) {
@@ -79,7 +106,7 @@ static Token *tokenize(char *p) {
             p++;
             continue;
         }
-        error("invalid totken");
+        error_at(p, "invalid totken");
     }
     cur = cur->next = new_token(TK_EOF, p, p);
     return head.next;
@@ -90,7 +117,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s: invalid number of arguments\n", argv[0]);
         return 1;
     }
-    Token *tok = tokenize(argv[1]);
+    current_input = argv[1];
+    Token *tok = tokenize();
     char *p = argv[1];
     printf("  .global main\n");
     printf("main:\n");
